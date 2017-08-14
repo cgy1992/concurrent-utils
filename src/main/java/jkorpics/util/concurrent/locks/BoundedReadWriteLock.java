@@ -7,7 +7,7 @@ import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Wrapper around ReentrantLock that sets an upper bound on the number of ReadLocks handed out at any given time.
- * WriteLocks take priority, so no new ReadLocks are handed out if any thread is waiting for a WriteLock.
+ * WriteLocks take priority, so no new ReadLocks are handed out if any thread is polling for a WriteLock.
  * Only one WriteLock at a time is issued.  THe number of max read locks can be updated duriing runtime.  Reducing
  * the max number of read locks has no effect on the number of ReadLocks held at the time.
  * Created by jkorpics on 3/18/17.

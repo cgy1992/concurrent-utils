@@ -8,7 +8,8 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
-import java.util.function.Predicate;
+
+import jkorpics.util.concurrent.polling.PollingUtils;
 
 import static org.junit.Assert.*;
 
@@ -17,17 +18,17 @@ import static org.junit.Assert.*;
  */
 public class BoundedReadWriteLockTest {
 
-    public static abstract class LockClient implements Runnable {
-        public volatile boolean haveReadLock = Boolean.FALSE;
-        public volatile boolean haveWriteLock = Boolean.FALSE;
-        public volatile boolean running = Boolean.FALSE;
+    private static abstract class LockClient implements Runnable {
+        volatile boolean haveReadLock = Boolean.FALSE;
+        volatile boolean haveWriteLock = Boolean.FALSE;
+        volatile boolean running = Boolean.FALSE;
         private BoundedReadWriteLock lock;
 
-        public LockClient(BoundedReadWriteLock lock) {
+        LockClient(BoundedReadWriteLock lock) {
             this.lock = lock;
         }
 
-        public void read() {
+        void read() {
             try {
                 lock.acquireRead();
                 haveReadLock = Boolean.TRUE;
@@ -36,7 +37,7 @@ public class BoundedReadWriteLockTest {
             }
         }
 
-        public void write() {
+        void write() {
             try {
                 lock.acquireWrite();
                 haveWriteLock = Boolean.TRUE;
@@ -45,12 +46,12 @@ public class BoundedReadWriteLockTest {
             }
         }
 
-        public void stopRead() {
+        void stopRead() {
             lock.releaseRead();
             haveReadLock = Boolean.FALSE;
         }
 
-        public void stopWrite() {
+        void stopWrite() {
             lock.releaseWrite();
             haveWriteLock = Boolean.FALSE;
         }
@@ -200,7 +201,7 @@ public class BoundedReadWriteLockTest {
 
         // now see if write lock is issued
         waitForWriteLockIssued(lock);
-        verifyWriteOnly(lock, readClients, writeClient);
+        verifyWriteOnly(readClients, writeClient);
 
         // release the write lock and verify read locks issued again
         writeClient.stopWrite();
@@ -220,10 +221,10 @@ public class BoundedReadWriteLockTest {
         assertFalse("Write lock should not be held when there are outstanding read locks", writeClient.haveWriteLock);
     }
 
-    private void verifyWriteOnly(BoundedReadWriteLock lock, List<LockClient> readClients, LockClient writeClient) {
+    private void verifyWriteOnly(List<LockClient> readClients, LockClient writeClient) {
         List<LockClient> holders = filterReadLockHolders(readClients);
-        assertEquals("Dont have the correct number of read locks", 0, holders.size());
-        assertTrue("Write lock should not be held when there are outstanding read locks", writeClient.haveWriteLock);
+        assertEquals("No read locks should be issued if write lock is issued.", 0, holders.size());
+        assertTrue("Write locks can be held when no read locks are issued.", writeClient.haveWriteLock);
     }
 
     private void releaseReads(BoundedReadWriteLock lock, List<LockClient> readClients) {
@@ -234,36 +235,22 @@ public class BoundedReadWriteLockTest {
     }
 
     private void waitForRunning(final LockClient client) {
-        waitUntil(x -> client.running);
+        PollingUtils.waitForSupplier(() -> client.running, 50L, 5000L);
     }
 
     private void waitForWriteLockIssued(final BoundedReadWriteLock lock) {
-        waitUntil((x) -> lock.isWriteLockIssued());
+        PollingUtils.waitForSupplier(() -> lock.isWriteLockIssued(), 50L, 5000L);
         assertTrue("Write lock expected to be issued", lock.isWriteLockIssued());
     }
 
     private void waitForReadLocksIssued(final int numReadLocks, final BoundedReadWriteLock lock) {
-        waitUntil((x) -> lock.getNumReadLocksIssued() == numReadLocks);
+        PollingUtils.waitForSupplier(() -> lock.getNumReadLocksIssued() == numReadLocks, 50L, 5000L);
         assertEquals(numReadLocks, lock.getNumReadLocksIssued());
     }
 
     private void verifyNumReadHolders(int numExpectedReadHolders, List<LockClient> clients) {
         List<LockClient> holders = filterReadLockHolders(clients);
         assertEquals("Dont have the correct number of read locks", numExpectedReadHolders, holders.size());
-    }
-
-    private void waitUntil(Predicate<Void> predicate) {
-        long maxWaitTime = 5000L;
-        long interval = 50L;
-        long total = 0L;
-        while(total < maxWaitTime && ! predicate.test(null)) {
-            try {
-                total += interval;
-                Thread.sleep(interval);
-            } catch(InterruptedException e) {
-                total = maxWaitTime;
-            }
-        }
     }
 
 }
