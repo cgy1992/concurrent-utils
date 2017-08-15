@@ -235,16 +235,16 @@ public class BoundedReadWriteLockTest {
     }
 
     private void waitForRunning(final LockClient client) {
-        PollingUtils.waitForSupplier(() -> client.running, 50L, 5000L);
+        PollingUtils.waitForCondition(() -> client.running, 50L, 5000L);
     }
 
     private void waitForWriteLockIssued(final BoundedReadWriteLock lock) {
-        PollingUtils.waitForSupplier(() -> lock.isWriteLockIssued(), 50L, 5000L);
+        PollingUtils.waitForCondition(() -> lock.isWriteLockIssued(), 50L, 5000L);
         assertTrue("Write lock expected to be issued", lock.isWriteLockIssued());
     }
 
     private void waitForReadLocksIssued(final int numReadLocks, final BoundedReadWriteLock lock) {
-        PollingUtils.waitForSupplier(() -> lock.getNumReadLocksIssued() == numReadLocks, 50L, 5000L);
+        PollingUtils.waitForCondition(() -> lock.getNumReadLocksIssued() == numReadLocks, 50L, 5000L);
         assertEquals(numReadLocks, lock.getNumReadLocksIssued());
     }
 

@@ -28,7 +28,7 @@ public class PollingUtilsTest {
     @Test
     public void testPredicateTrue() {
         CountingSupplier supplier =  new CountingSupplier(3);
-        boolean result = PollingUtils.waitForPredicate(CountingSupplier::get, supplier, 2L, 100L);
+        boolean result = PollingUtils.waitForCondition(CountingSupplier::get, supplier, 2L, 100L);
         assertEquals(4, supplier.getCalledCount());
         assertTrue(result);
     }
@@ -36,7 +36,7 @@ public class PollingUtilsTest {
     @Test
     public void testPredicateFalse() {
         CountingSupplier supplier =  new CountingSupplier(1000);
-        boolean result = PollingUtils.waitForPredicate(CountingSupplier::get, supplier, 2L, 100L);
+        boolean result = PollingUtils.waitForCondition(CountingSupplier::get, supplier, 2L, 100L);
         assertEquals(51, supplier.getCalledCount());
         assertFalse(result);
     }
@@ -44,7 +44,7 @@ public class PollingUtilsTest {
     @Test
     public void testSupplierTrue() {
         CountingSupplier supplier  = new CountingSupplier(3);
-        boolean result = PollingUtils.waitForSupplier(supplier, 2L, 100L);
+        boolean result = PollingUtils.waitForCondition(supplier, 2L, 100L);
         assertEquals(4, supplier.getCalledCount());
         assertTrue(result);
     }
@@ -52,7 +52,7 @@ public class PollingUtilsTest {
     @Test
     public void testSupplierFalse() {
         CountingSupplier supplier  = new CountingSupplier(1000);
-        boolean result = PollingUtils.waitForSupplier(supplier, 2L, 100L);
+        boolean result = PollingUtils.waitForCondition(supplier, 2L, 100L);
         assertEquals(51, supplier.getCalledCount());
         assertFalse(result);
     }
