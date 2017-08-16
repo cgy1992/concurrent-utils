@@ -63,13 +63,13 @@ public class BoundedReadWriteLock {
     public void acquireWrite() throws InterruptedException {
         lock.lock();
         try {
+            writesWaiting++;
             while (writeLockIssued || numReadLocksIssued.get() > 0) {
-                writesWaiting++;
                 writeCondition.await();
-                writesWaiting--;
             }
             writeLockIssued = Boolean.TRUE;
         } finally {
+            writesWaiting--;
             lock.unlock();
         }
     }
