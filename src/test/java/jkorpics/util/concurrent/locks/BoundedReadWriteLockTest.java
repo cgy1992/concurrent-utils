@@ -140,7 +140,9 @@ public class BoundedReadWriteLockTest {
         assertFalse("Reset should reset write lock count", lock.isWriteLockIssued());
         lock.acquireRead();
         lock.acquireRead();
-        assertEquals(2, lock.getNumReadLocksIssued());
+        assertEquals("Two reentrant read locks aqcuired by same thread should only increment read lock count once", 1, lock.getNumReadLocksIssued());
+        lock.releaseRead();
+        assertEquals("Read lock count should only decrement when thread releases all of its locks.", 1, lock.getNumReadLocksIssued());
         lock.reset();
         assertEquals("Reset should reset read lock count", 0, lock.getNumReadLocksIssued());
     }

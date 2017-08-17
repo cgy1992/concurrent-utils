@@ -1,5 +1,7 @@
 package jkorpics.util.concurrent.locks;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
@@ -15,19 +17,24 @@ import java.util.concurrent.locks.ReentrantLock;
 
 public class BoundedReadWriteLock {
 
-    private int maxReadLocks;
     private final ReentrantLock lock;
     private final Condition writeCondition;
     private final Condition readCondition;
 
-    private AtomicInteger numReadLocksIssued;
-    private boolean writeLockIssued;
+    private int maxReadLocks;
     private int writesWaiting;
+    private boolean writeLockIssued;
+    private int readLockCount;
+    private ThreadLockCounter threadReadLockCount;
+    private ThreadLockCounter threadWriteLockCount;
+
 
     public BoundedReadWriteLock(final int maxReadLocks) {
         this.maxReadLocks = maxReadLocks > 0 ? maxReadLocks : 0;
-        this.numReadLocksIssued = new AtomicInteger(0);
-        this.writeLockIssued = Boolean.FALSE;
+        this.writeLockIssued = false;
+        this.readLockCount = 0;
+        this.threadReadLockCount = new ThreadLockCounter();
+        this.threadWriteLockCount = new ThreadLockCounter();
         this.lock = new ReentrantLock();
         writeCondition = lock.newCondition();
         readCondition = lock.newCondition();
@@ -45,8 +52,10 @@ public class BoundedReadWriteLock {
     }
 
     public int getNumReadLocksIssued() {
-        return numReadLocksIssued.get();
+        return readLockCount;
     }
+
+    public boolean isReadLockIssued() { return readLockCount > 0; }
 
     public boolean isWriteLockIssued() {
         return writeLockIssued;
@@ -54,9 +63,11 @@ public class BoundedReadWriteLock {
 
     public void reset() {
         lock.lock();
-        numReadLocksIssued.set(0);
-        writeLockIssued = Boolean.FALSE;
+        readLockCount = 0;
         writesWaiting = 0;
+        writeLockIssued = false;
+        threadReadLockCount = new ThreadLockCounter();
+        threadWriteLockCount = new ThreadLockCounter();
         lock.unlock();
     }
 
@@ -64,10 +75,11 @@ public class BoundedReadWriteLock {
         lock.lock();
         try {
             writesWaiting++;
-            while (writeLockIssued || numReadLocksIssued.get() > 0) {
+            while (! canIssueWrite()) {
                 writeCondition.await();
             }
-            writeLockIssued = Boolean.TRUE;
+            increment(threadWriteLockCount);
+            writeLockIssued = true;
         } finally {
             writesWaiting--;
             lock.unlock();
@@ -77,10 +89,12 @@ public class BoundedReadWriteLock {
     public void acquireRead() throws InterruptedException {
         lock.lock();
         try {
-            while (writesWaiting > 0 || writeLockIssued || numReadLocksIssued.get() >= maxReadLocks) {
+            while (! canIssueRead() )   {
                 readCondition.await();
             }
-            numReadLocksIssued.incrementAndGet();
+            if(increment(threadReadLockCount) == 1) {
+                readLockCount++;
+            }
         } finally {
             lock.unlock();
         }
@@ -89,9 +103,11 @@ public class BoundedReadWriteLock {
     public void releaseWrite() {
         lock.lock();
         try {
-            writeLockIssued = Boolean.FALSE;
-            writeCondition.signal();
-            readCondition.signalAll();
+            if(decrement(threadWriteLockCount) == 0) {
+                writeLockIssued = false;
+                writeCondition.signal();
+                readCondition.signalAll();
+            }
         } finally {
             lock.unlock();
         }
@@ -99,14 +115,62 @@ public class BoundedReadWriteLock {
 
     public void releaseRead() {
         lock.lock();
-        try {
-            if (0 > numReadLocksIssued.decrementAndGet()) {
-                numReadLocksIssued.incrementAndGet();
+        try{
+            if(decrement(threadReadLockCount) == 0) {
+                if(readLockCount > 0) {
+                    readLockCount--;
+                    writeCondition.signal();
+                    readCondition.signalAll();
+                }
             }
-            writeCondition.signal();
-            readCondition.signalAll();
+
         } finally {
             lock.unlock();
+        }
+    }
+
+    private boolean canIssueRead() {
+        return holdsReadLock() || (isReadLockAvailable() && !blockForWrite());
+    }
+
+    private boolean canIssueWrite() {
+        return holdsWriteLock() || ! (isReadLockIssued() || isWriteLockIssued());
+    }
+
+    private boolean holdsReadLock() {
+        return threadReadLockCount.get().intValue() > 0;
+    }
+
+    private boolean holdsWriteLock() {
+        return threadWriteLockCount.get().intValue() > 0;
+    }
+
+    private boolean blockForWrite() {
+        return writesWaiting > 0 || isWriteLockIssued();
+    }
+
+    private boolean isReadLockAvailable() {
+        return readLockCount < maxReadLocks;
+    }
+
+    private int increment(final ThreadLockCounter counter) {
+        int i = counter.get().intValue();
+        i++;
+        counter.set(i);
+        return i;
+    }
+
+    private int decrement(final ThreadLockCounter counter) {
+        int i = counter.get().intValue();
+        if(i > 0)
+            i--;
+        return i;
+    }
+
+    private static class ThreadLockCounter extends ThreadLocal<Integer> {
+        @Override
+        protected Integer initialValue() {
+            return 0;
         }
     }
 
